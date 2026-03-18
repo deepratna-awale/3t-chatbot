@@ -4,6 +4,8 @@ import { auth } from '@/app/(auth)/auth';
 import { myProvider } from '@/lib/ai/providers';
 import { generateText } from 'ai';
 
+export const dynamic = 'force-dynamic';
+
 // Function to generate AI explanation for a project
 async function generateProjectExplanation(
   projectName: string,

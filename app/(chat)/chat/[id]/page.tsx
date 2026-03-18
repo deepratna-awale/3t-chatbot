@@ -3,6 +3,8 @@ import { notFound, redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 
 import { auth } from '@/app/(auth)/auth';
+
+export const dynamic = 'force-dynamic';
 import { Chat } from '@/components/chat';
 import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
 import { DataStreamHandler } from '@/components/data-stream-handler';

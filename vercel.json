@@ -1,3 +1,8 @@
 {
-  "framework": "nextjs"
+  "crons": [
+    {
+      "path": "/api/refresh-profile",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }

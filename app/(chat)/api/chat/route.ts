@@ -1,25 +1,13 @@
-import { geolocation, ipAddress } from "@vercel/functions";
 import {
   convertToModelMessages,
   createUIMessageStream,
-  createUIMessageStreamResponse,
-  generateId,
+  JsonToSseTransformStream,
+  smoothStream,
   stepCountIs,
   streamText,
-} from "ai";
-import { checkBotId } from "botid/server";
-import { after } from "next/server";
-import { createResumableStreamContext } from "resumable-stream";
-import { auth, type UserType } from "@/app/(auth)/auth";
-import { entitlementsByUserType } from "@/lib/ai/entitlements";
-import { allowedModelIds } from "@/lib/ai/models";
-import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
-import { getLanguageModel } from "@/lib/ai/providers";
-import { createDocument } from "@/lib/ai/tools/create-document";
-import { getWeather } from "@/lib/ai/tools/get-weather";
-import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
-import { updateDocument } from "@/lib/ai/tools/update-document";
-import { isProductionEnvironment } from "@/lib/constants";
+} from 'ai';
+import { auth, type UserType } from '@/app/(auth)/auth';
+import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
 import {
   createStreamId,
   deleteChatById,
@@ -28,98 +16,146 @@ import {
   getMessagesByChatId,
   saveChat,
   saveMessages,
-  updateChatTitleById,
-  updateMessage,
-} from "@/lib/db/queries";
-import type { DBMessage } from "@/lib/db/schema";
-import { ChatbotError } from "@/lib/errors";
-import { checkIpRateLimit } from "@/lib/ratelimit";
-import type { ChatMessage } from "@/lib/types";
-import { convertToUIMessages, generateUUID } from "@/lib/utils";
-import { generateTitleFromUserMessage } from "../../actions";
-import { type PostRequestBody, postRequestBodySchema } from "./schema";
+} from '@/lib/db/queries';
+import { convertToUIMessages, generateUUID } from '@/lib/utils';
+import { generateTitleFromUserMessage } from '../../actions';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { getWeather } from '@/lib/ai/tools/get-weather';
+import { isProductionEnvironment } from '@/lib/constants';
+import { myProvider } from '@/lib/ai/providers';
+import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import { postRequestBodySchema, type PostRequestBody } from './schema';
+import { geolocation } from '@vercel/functions';
+import {
+  createResumableStreamContext,
+  type ResumableStreamContext,
+} from 'resumable-stream';
+import { after } from 'next/server';
+import { TTTChatError } from '@/lib/errors';
+import type { ChatMessage } from '@/lib/types';
+import type { ChatModel } from '@/lib/ai/models';
+import type { VisibilityType } from '@/components/visibility-selector';
 
 export const maxDuration = 60;
 
-function getStreamContext() {
-  try {
-    return createResumableStreamContext({ waitUntil: after });
-  } catch (_) {
-    return null;
+let globalStreamContext: ResumableStreamContext | null = null;
+
+export function getStreamContext() {
+  if (!globalStreamContext) {
+    try {
+      globalStreamContext = createResumableStreamContext({
+        waitUntil: after,
+      });
+    } catch (error: any) {
+      if (error.message.includes('REDIS_URL')) {
+        console.log(
+          ' > Resumable streams are disabled due to missing REDIS_URL',
+        );
+      } else {
+        console.error(error);
+      }
+    }
   }
+
+  return globalStreamContext;
 }
 
-export { getStreamContext };
-
 export async function POST(request: Request) {
+  console.log('Chat API POST request started');
   let requestBody: PostRequestBody;
 
   try {
     const json = await request.json();
+    console.log('Request JSON parsed successfully');
     requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
-    return new ChatbotError("bad_request:api").toResponse();
+    console.log('Request body schema validation passed');
+  } catch (error) {
+    console.error('Request parsing error:', error);
+    return new TTTChatError('bad_request:api').toResponse();
   }
 
   try {
-    const { id, message, messages, selectedChatModel, selectedVisibilityType } =
-      requestBody;
+    const {
+      id,
+      message,
+      selectedChatModel,
+      selectedVisibilityType,
+    }: {
+      id: string;
+      message: ChatMessage;
+      selectedChatModel: ChatModel['id'];
+      selectedVisibilityType: VisibilityType;
+    } = requestBody;
 
-    const [botResult, session] = await Promise.all([checkBotId(), auth()]);
+    console.log('Request body destructured, chat ID:', id);
 
-    if (botResult.isBot) {
-      return new ChatbotError("unauthorized:chat").toResponse();
-    }
+    const session = await auth();
+    console.log(
+      'Auth session retrieved:',
+      session?.user?.id ? 'authenticated' : 'not authenticated',
+    );
 
     if (!session?.user) {
-      return new ChatbotError("unauthorized:chat").toResponse();
+      return new TTTChatError('unauthorized:chat').toResponse();
     }
-
-    if (!allowedModelIds.has(selectedChatModel)) {
-      return new ChatbotError("bad_request:api").toResponse();
-    }
-
-    await checkIpRateLimit(ipAddress(request));
 
     const userType: UserType = session.user.type;
+    console.log('User type:', userType);
 
     const messageCount = await getMessageCountByUserId({
       id: session.user.id,
-      differenceInHours: 1,
+      differenceInHours: 24,
     });
+    console.log('Message count retrieved:', messageCount);
 
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerHour) {
-      return new ChatbotError("rate_limit:chat").toResponse();
+    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
+      console.log('Rate limit exceeded for user:', session.user.id);
+      return new TTTChatError('rate_limit:chat').toResponse();
     }
 
-    const isToolApprovalFlow = Boolean(messages);
+    console.log('Rate limit check passed');
 
     const chat = await getChatById({ id });
-    let messagesFromDb: DBMessage[] = [];
-    let titlePromise: Promise<string> | null = null;
+    console.log('Chat retrieved from DB:', chat ? 'exists' : 'not found');
 
-    if (chat) {
-      if (chat.userId !== session.user.id) {
-        return new ChatbotError("forbidden:chat").toResponse();
-      }
-      if (!isToolApprovalFlow) {
-        messagesFromDb = await getMessagesByChatId({ id });
-      }
-    } else if (message?.role === "user") {
+    if (!chat) {
+      console.log('Creating new chat...');
+      const title = await generateTitleFromUserMessage({
+        message,
+      });
+      console.log('Title generated:', title);
+
       await saveChat({
         id,
         userId: session.user.id,
-        title: "New chat",
+        title,
         visibility: selectedVisibilityType,
       });
-      titlePromise = generateTitleFromUserMessage({ message });
+      console.log('New chat saved');
+    } else {
+      if (chat.userId !== session.user.id) {
+        console.log('Chat belongs to different user');
+        return new TTTChatError('forbidden:chat').toResponse();
+      }
     }
 
-    const uiMessages = isToolApprovalFlow
-      ? (messages as ChatMessage[])
-      : [...convertToUIMessages(messagesFromDb), message as ChatMessage];
+    console.log('Chat access validated');
+
+    const messagesFromDb = await getMessagesByChatId({ id });
+    console.log('Messages retrieved from DB, count:', messagesFromDb.length);
+
+    const uiMessages = [...convertToUIMessages(messagesFromDb), message];
+    console.log('UI messages prepared, count:', uiMessages.length);
 
     const { longitude, latitude, city, country } = geolocation(request);
+    console.log('Geolocation extracted:', {
+      longitude,
+      latitude,
+      city,
+      country,
+    });
 
     const requestHints: RequestHints = {
       longitude,
@@ -128,184 +164,158 @@ export async function POST(request: Request) {
       country,
     };
 
-    if (message?.role === "user") {
-      await saveMessages({
-        messages: [
-          {
-            chatId: id,
-            id: message.id,
-            role: "user",
-            parts: message.parts,
-            attachments: [],
-            createdAt: new Date(),
-          },
-        ],
-      });
-    }
+    console.log('Saving user message...');
+    await saveMessages({
+      messages: [
+        {
+          chatId: id,
+          id: message.id,
+          role: 'user',
+          parts: message.parts,
+          attachments: [],
+          createdAt: new Date(),
+        },
+      ],
+    });
+    console.log('User message saved');
 
-    const isReasoningModel =
-      selectedChatModel.endsWith("-thinking") ||
-      (selectedChatModel.includes("reasoning") &&
-        !selectedChatModel.includes("non-reasoning"));
+    const streamId = generateUUID();
+    console.log('Generated stream ID:', streamId);
 
-    const modelMessages = await convertToModelMessages(uiMessages);
+    await createStreamId({ streamId, chatId: id });
+    console.log('Stream ID created in DB');
 
+    console.log('Creating UI message stream...');
     const stream = createUIMessageStream({
-      originalMessages: isToolApprovalFlow ? uiMessages : undefined,
-      execute: async ({ writer: dataStream }) => {
-        const result = streamText({
-          model: getLanguageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
-          messages: modelMessages,
-          stopWhen: stepCountIs(5),
-          experimental_activeTools: isReasoningModel
-            ? []
-            : [
-                "getWeather",
-                "createDocument",
-                "updateDocument",
-                "requestSuggestions",
-              ],
-          providerOptions: isReasoningModel
-            ? {
-                anthropic: {
-                  thinking: { type: "enabled", budgetTokens: 10_000 },
-                },
-              }
-            : undefined,
-          tools: {
-            getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({ session, dataStream }),
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: "stream-text",
-          },
-        });
+      execute: ({ writer: dataStream }) => {
+        console.log('Stream execution started');
+        console.log('Selected chat model:', selectedChatModel);
 
-        dataStream.merge(
-          result.toUIMessageStream({ sendReasoning: isReasoningModel })
-        );
+        try {
+          console.log('Getting language model from provider...');
+          const languageModel = myProvider.languageModel(selectedChatModel);
+          console.log('Language model obtained');
 
-        if (titlePromise) {
-          const title = await titlePromise;
-          dataStream.write({ type: "data-chat-title", data: title });
-          updateChatTitleById({ chatId: id, title });
+          const result = streamText({
+            model: languageModel,
+            system: systemPrompt({ selectedChatModel, requestHints }),
+            messages: convertToModelMessages(uiMessages),
+            stopWhen: stepCountIs(5),
+            experimental_activeTools:
+              selectedChatModel === 'chat-model-reasoning'
+                ? []
+                : [
+                    'getWeather',
+                    'createDocument',
+                    'updateDocument',
+                    'requestSuggestions',
+                  ],
+            experimental_transform: smoothStream({ chunking: 'word' }),
+            tools: {
+              getWeather,
+              createDocument: createDocument({ session, dataStream }),
+              updateDocument: updateDocument({ session, dataStream }),
+              requestSuggestions: requestSuggestions({
+                session,
+                dataStream,
+              }),
+            },
+            experimental_telemetry: {
+              isEnabled: isProductionEnvironment,
+              functionId: 'stream-text',
+            },
+          });
+
+          console.log('streamText result created');
+          result.consumeStream();
+
+          dataStream.merge(
+            result.toUIMessageStream({
+              sendReasoning: true,
+            }),
+          );
+
+          console.log('Stream setup completed');
+        } catch (streamError) {
+          console.error('Error in stream execution:', streamError);
+          throw streamError;
         }
       },
       generateId: generateUUID,
-      onFinish: async ({ messages: finishedMessages }) => {
-        if (isToolApprovalFlow) {
-          for (const finishedMsg of finishedMessages) {
-            const existingMsg = uiMessages.find((m) => m.id === finishedMsg.id);
-            if (existingMsg) {
-              await updateMessage({
-                id: finishedMsg.id,
-                parts: finishedMsg.parts,
-              });
-            } else {
-              await saveMessages({
-                messages: [
-                  {
-                    id: finishedMsg.id,
-                    role: finishedMsg.role,
-                    parts: finishedMsg.parts,
-                    createdAt: new Date(),
-                    attachments: [],
-                    chatId: id,
-                  },
-                ],
-              });
-            }
-          }
-        } else if (finishedMessages.length > 0) {
-          await saveMessages({
-            messages: finishedMessages.map((currentMessage) => ({
-              id: currentMessage.id,
-              role: currentMessage.role,
-              parts: currentMessage.parts,
-              createdAt: new Date(),
-              attachments: [],
-              chatId: id,
-            })),
-          });
-        }
+      onFinish: async ({ messages }) => {
+        await saveMessages({
+          messages: messages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            parts: message.parts,
+            createdAt: new Date(),
+            attachments: [],
+            chatId: id,
+          })),
+        });
       },
-      onError: (error) => {
-        if (
-          error instanceof Error &&
-          error.message?.includes(
-            "AI Gateway requires a valid credit card on file to service requests"
-          )
-        ) {
-          return "AI Gateway requires a valid credit card on file to service requests. Please visit https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%3Fmodal%3Dadd-credit-card to add a card and unlock your free credits.";
-        }
-        return "Oops, an error occurred!";
+      onError: () => {
+        return 'Oops, an error occurred!';
       },
     });
 
-    return createUIMessageStreamResponse({
-      stream,
-      async consumeSseStream({ stream: sseStream }) {
-        if (!process.env.REDIS_URL) {
-          return;
-        }
-        try {
-          const streamContext = getStreamContext();
-          if (streamContext) {
-            const streamId = generateId();
-            await createStreamId({ streamId, chatId: id });
-            await streamContext.createNewResumableStream(
-              streamId,
-              () => sseStream
-            );
-          }
-        } catch (_) {
-          // ignore redis errors
-        }
-      },
-    });
+    console.log('UI message stream created');
+    const streamContext = getStreamContext();
+    console.log(
+      'Stream context obtained:',
+      streamContext ? 'resumable' : 'direct',
+    );
+
+    if (streamContext) {
+      console.log('Using resumable stream');
+      const response = new Response(
+        await streamContext.resumableStream(streamId, () =>
+          stream.pipeThrough(new JsonToSseTransformStream()),
+        ),
+      );
+      console.log('Resumable stream response created');
+      return response;
+    } else {
+      console.log('Using direct stream');
+      const response = new Response(
+        stream.pipeThrough(new JsonToSseTransformStream()),
+      );
+      console.log('Direct stream response created');
+      return response;
+    }
   } catch (error) {
-    const vercelId = request.headers.get("x-vercel-id");
+    console.error('Chat API Error:', error);
 
-    if (error instanceof ChatbotError) {
+    if (error instanceof TTTChatError) {
       return error.toResponse();
     }
 
-    if (
-      error instanceof Error &&
-      error.message?.includes(
-        "AI Gateway requires a valid credit card on file to service requests"
-      )
-    ) {
-      return new ChatbotError("bad_request:activate_gateway").toResponse();
-    }
-
-    console.error("Unhandled error in chat API:", error, { vercelId });
-    return new ChatbotError("offline:chat").toResponse();
+    // Handle any other unexpected errors
+    return new TTTChatError(
+      'bad_request:chat',
+      'An unexpected error occurred while processing your request.',
+    ).toResponse();
   }
 }
 
 export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
+  const id = searchParams.get('id');
 
   if (!id) {
-    return new ChatbotError("bad_request:api").toResponse();
+    return new TTTChatError('bad_request:api').toResponse();
   }
 
   const session = await auth();
 
   if (!session?.user) {
-    return new ChatbotError("unauthorized:chat").toResponse();
+    return new TTTChatError('unauthorized:chat').toResponse();
   }
 
   const chat = await getChatById({ id });
 
-  if (chat?.userId !== session.user.id) {
-    return new ChatbotError("forbidden:chat").toResponse();
+  if (chat.userId !== session.user.id) {
+    return new TTTChatError('forbidden:chat').toResponse();
   }
 
   const deletedChat = await deleteChatById({ id });

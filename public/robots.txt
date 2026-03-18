@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Allow: /about
+Disallow: /login
+Disallow: /register
+Disallow: /api/
+Disallow: /chat/
+
+Sitemap: https://3tchat.vercel.app/sitemap.xml

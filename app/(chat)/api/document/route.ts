@@ -1,27 +1,27 @@
-import { auth } from "@/app/(auth)/auth";
-import type { ArtifactKind } from "@/components/artifact";
+import { auth } from '@/app/(auth)/auth';
+import type { ArtifactKind } from '@/components/artifact';
 import {
   deleteDocumentsByIdAfterTimestamp,
   getDocumentsById,
   saveDocument,
-} from "@/lib/db/queries";
-import { ChatbotError } from "@/lib/errors";
+} from '@/lib/db/queries';
+import { TTTChatError } from '@/lib/errors';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
+  const id = searchParams.get('id');
 
   if (!id) {
-    return new ChatbotError(
-      "bad_request:api",
-      "Parameter id is missing"
+    return new TTTChatError(
+      'bad_request:api',
+      'Parameter id is missing',
     ).toResponse();
   }
 
   const session = await auth();
 
   if (!session?.user) {
-    return new ChatbotError("unauthorized:document").toResponse();
+    return new TTTChatError('unauthorized:document').toResponse();
   }
 
   const documents = await getDocumentsById({ id });
@@ -29,11 +29,11 @@ export async function GET(request: Request) {
   const [document] = documents;
 
   if (!document) {
-    return new ChatbotError("not_found:document").toResponse();
+    return new TTTChatError('not_found:document').toResponse();
   }
 
   if (document.userId !== session.user.id) {
-    return new ChatbotError("forbidden:document").toResponse();
+    return new TTTChatError('forbidden:document').toResponse();
   }
 
   return Response.json(documents, { status: 200 });
@@ -41,19 +41,19 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
+  const id = searchParams.get('id');
 
   if (!id) {
-    return new ChatbotError(
-      "bad_request:api",
-      "Parameter id is required."
+    return new TTTChatError(
+      'bad_request:api',
+      'Parameter id is required.',
     ).toResponse();
   }
 
   const session = await auth();
 
   if (!session?.user) {
-    return new ChatbotError("not_found:document").toResponse();
+    return new TTTChatError('not_found:document').toResponse();
   }
 
   const {
@@ -66,10 +66,10 @@ export async function POST(request: Request) {
   const documents = await getDocumentsById({ id });
 
   if (documents.length > 0) {
-    const [doc] = documents;
+    const [document] = documents;
 
-    if (doc.userId !== session.user.id) {
-      return new ChatbotError("forbidden:document").toResponse();
+    if (document.userId !== session.user.id) {
+      return new TTTChatError('forbidden:document').toResponse();
     }
   }
 
@@ -86,27 +86,27 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  const timestamp = searchParams.get("timestamp");
+  const id = searchParams.get('id');
+  const timestamp = searchParams.get('timestamp');
 
   if (!id) {
-    return new ChatbotError(
-      "bad_request:api",
-      "Parameter id is required."
+    return new TTTChatError(
+      'bad_request:api',
+      'Parameter id is required.',
     ).toResponse();
   }
 
   if (!timestamp) {
-    return new ChatbotError(
-      "bad_request:api",
-      "Parameter timestamp is required."
+    return new TTTChatError(
+      'bad_request:api',
+      'Parameter timestamp is required.',
     ).toResponse();
   }
 
   const session = await auth();
 
   if (!session?.user) {
-    return new ChatbotError("unauthorized:document").toResponse();
+    return new TTTChatError('unauthorized:document').toResponse();
   }
 
   const documents = await getDocumentsById({ id });
@@ -114,7 +114,7 @@ export async function DELETE(request: Request) {
   const [document] = documents;
 
   if (document.userId !== session.user.id) {
-    return new ChatbotError("forbidden:document").toResponse();
+    return new TTTChatError('forbidden:document').toResponse();
   }
 
   const documentsDeleted = await deleteDocumentsByIdAfterTimestamp({

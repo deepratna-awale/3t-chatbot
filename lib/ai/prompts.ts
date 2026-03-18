@@ -1,5 +1,5 @@
-import type { Geo } from "@vercel/functions";
-import type { ArtifactKind } from "@/components/artifact";
+import type { ArtifactKind } from '@/components/artifact';
+import type { Geo } from '@vercel/functions';
 
 export const artifactsPrompt = `
 Artifacts is a special user interface mode that helps users with writing, editing, and other content creation tasks. When artifact is open, it is on the right side of the screen, while the conversation is on the left side. When creating or updating documents, changes are reflected in real-time on the artifacts and visible to the user.
@@ -30,23 +30,17 @@ This is a guide for using artifacts tools: \`createDocument\` and \`updateDocume
 - Immediately after creating a document
 
 Do not update document right after creating it. Wait for user feedback or request to update it.
-
-**Using \`requestSuggestions\`:**
-- ONLY use when the user explicitly asks for suggestions on an existing document
-- Requires a valid document ID from a previously created document
-- Never use for general questions or information requests
 `;
 
-export const regularPrompt = `You are a friendly assistant! Keep your responses concise and helpful.
+export const regularPrompt =
+  'You are a friendly assistant! Keep your responses concise and helpful.';
 
-When asked to write, create, or help with something, just do it directly. Don't ask clarifying questions unless absolutely necessary - make reasonable assumptions and proceed with the task.`;
-
-export type RequestHints = {
-  latitude: Geo["latitude"];
-  longitude: Geo["longitude"];
-  city: Geo["city"];
-  country: Geo["country"];
-};
+export interface RequestHints {
+  latitude: Geo['latitude'];
+  longitude: Geo['longitude'];
+  city: Geo['city'];
+  country: Geo['country'];
+}
 
 export const getRequestPromptFromHints = (requestHints: RequestHints) => `\
 About the origin of user's request:
@@ -65,15 +59,11 @@ export const systemPrompt = ({
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
 
-  // reasoning models don't need artifacts prompt (they can't use tools)
-  if (
-    selectedChatModel.includes("reasoning") ||
-    selectedChatModel.includes("thinking")
-  ) {
+  if (selectedChatModel === 'chat-model-reasoning') {
     return `${regularPrompt}\n\n${requestPrompt}`;
+  } else {
+    return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
   }
-
-  return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
 };
 
 export const codePrompt = `
@@ -108,32 +98,24 @@ You are a spreadsheet creation assistant. Create a spreadsheet in csv format bas
 
 export const updateDocumentPrompt = (
   currentContent: string | null,
-  type: ArtifactKind
-) => {
-  let mediaType = "document";
+  type: ArtifactKind,
+) =>
+  type === 'text'
+    ? `\
+Improve the following contents of the document based on the given prompt.
 
-  if (type === "code") {
-    mediaType = "code snippet";
-  } else if (type === "sheet") {
-    mediaType = "spreadsheet";
-  }
+${currentContent}
+`
+    : type === 'code'
+      ? `\
+Improve the following code snippet based on the given prompt.
 
-  return `Improve the following contents of the ${mediaType} based on the given prompt.
+${currentContent}
+`
+      : type === 'sheet'
+        ? `\
+Improve the following spreadsheet based on the given prompt.
 
-${currentContent}`;
-};
-
-export const titlePrompt = `Generate a short chat title (2-5 words) summarizing the user's message.
-
-Output ONLY the title text. No prefixes, no formatting.
-
-Examples:
-- "what's the weather in nyc" → Weather in NYC
-- "help me write an essay about space" → Space Essay Help
-- "hi" → New Conversation
-- "debug my python code" → Python Debugging
-
-Bad outputs (never do this):
-- "# Space Essay" (no hashtags)
-- "Title: Weather" (no prefixes)
-- ""NYC Weather"" (no quotes)`;
+${currentContent}
+`
+        : '';

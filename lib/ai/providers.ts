@@ -1,63 +1,37 @@
-import { gateway } from "@ai-sdk/gateway";
 import {
   customProvider,
   extractReasoningMiddleware,
   wrapLanguageModel,
-} from "ai";
-import { isTestEnvironment } from "../constants";
-
-const THINKING_SUFFIX_REGEX = /-thinking$/;
+} from 'ai';
+import { xai } from '@ai-sdk/xai';
+import {
+  artifactModel,
+  chatModel,
+  reasoningModel,
+  titleModel,
+} from './models.test';
+import { isTestEnvironment } from '../constants';
 
 export const myProvider = isTestEnvironment
-  ? (() => {
-      const {
-        artifactModel,
-        chatModel,
-        reasoningModel,
-        titleModel,
-      } = require("./models.mock");
-      return customProvider({
-        languageModels: {
-          "chat-model": chatModel,
-          "chat-model-reasoning": reasoningModel,
-          "title-model": titleModel,
-          "artifact-model": artifactModel,
-        },
-      });
-    })()
-  : null;
-
-export function getLanguageModel(modelId: string) {
-  if (isTestEnvironment && myProvider) {
-    return myProvider.languageModel(modelId);
-  }
-
-  const isReasoningModel =
-    modelId.endsWith("-thinking") ||
-    (modelId.includes("reasoning") && !modelId.includes("non-reasoning"));
-
-  if (isReasoningModel) {
-    const gatewayModelId = modelId.replace(THINKING_SUFFIX_REGEX, "");
-
-    return wrapLanguageModel({
-      model: gateway.languageModel(gatewayModelId),
-      middleware: extractReasoningMiddleware({ tagName: "thinking" }),
+  ? customProvider({
+      languageModels: {
+        'chat-model': chatModel,
+        'chat-model-reasoning': reasoningModel,
+        'title-model': titleModel,
+        'artifact-model': artifactModel,
+      },
+    })
+  : customProvider({
+      languageModels: {
+        'chat-model': xai('grok-2-vision-1212'),
+        'chat-model-reasoning': wrapLanguageModel({
+          model: xai('grok-3-mini-beta'),
+          middleware: extractReasoningMiddleware({ tagName: 'think' }),
+        }),
+        'title-model': xai('grok-2-1212'),
+        'artifact-model': xai('grok-2-1212'),
+      },
+      imageModels: {
+        'small-model': xai.imageModel('grok-2-image'),
+      },
     });
-  }
-
-  return gateway.languageModel(modelId);
-}
-
-export function getTitleModel() {
-  if (isTestEnvironment && myProvider) {
-    return myProvider.languageModel("title-model");
-  }
-  return gateway.languageModel("google/gemini-2.5-flash-lite");
-}
-
-export function getArtifactModel() {
-  if (isTestEnvironment && myProvider) {
-    return myProvider.languageModel("artifact-model");
-  }
-  return gateway.languageModel("anthropic/claude-haiku-4.5");
-}

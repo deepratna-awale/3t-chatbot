@@ -1,37 +1,76 @@
-import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
-import { Suspense } from "react";
+import { cookies } from 'next/headers';
+import { notFound, redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 
-import { auth } from "@/app/(auth)/auth";
-import { Chat } from "@/components/chat";
-import { DataStreamHandler } from "@/components/data-stream-handler";
-import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
-import { getChatById, getMessagesByChatId } from "@/lib/db/queries";
-import { convertToUIMessages } from "@/lib/utils";
+import { auth } from '@/app/(auth)/auth';
+import { Chat } from '@/components/chat';
+import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
+import { DataStreamHandler } from '@/components/data-stream-handler';
+import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
+import { convertToUIMessages } from '@/lib/utils';
 
-export default function Page(props: { params: Promise<{ id: string }> }) {
-  return (
-    <Suspense fallback={<div className="flex h-dvh" />}>
-      <ChatPage params={props.params} />
-    </Suspense>
-  );
+export async function generateMetadata(props: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const params = await props.params;
+  const { id } = params;
+  const chat = await getChatById({ id });
+
+  const title = chat?.title || 'AI Chat Conversation';
+
+  return {
+    title: `${title} - AI Chat`,
+    description:
+      'Continue your AI conversation with advanced AI models. Enjoy intelligent responses, code execution, and file analysis capabilities.',
+    keywords: [
+      'AI chat',
+      'conversation',
+      'artificial intelligence',
+      'AI assistant',
+      'code execution',
+    ],
+    openGraph: {
+      title: `${title} - AI Chat`,
+      description:
+        'Continue your AI conversation with advanced AI models. Enjoy intelligent responses, code execution, and file analysis capabilities.',
+      type: 'website',
+      url: `https://3tchat.vercel.app/chat/${id}`,
+      images: [
+        {
+          url: '/images/open-graph.png',
+          width: 1200,
+          height: 630,
+          alt: 'AI Chat Conversation',
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${title} - AI Chat`,
+      description:
+        'Continue your AI conversation with advanced AI models. Enjoy intelligent responses, code execution, and file analysis capabilities.',
+      images: ['/images/open-graph.png'],
+      creator: '@deepratna_awale',
+    },
+  };
 }
 
-async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const { id } = params;
   const chat = await getChatById({ id });
 
   if (!chat) {
-    redirect("/");
+    notFound();
   }
 
   const session = await auth();
 
   if (!session) {
-    redirect("/api/auth/guest");
+    redirect('/api/auth/guest');
   }
 
-  if (chat.visibility === "private") {
+  if (chat.visibility === 'private') {
     if (!session.user) {
       return notFound();
     }
@@ -48,18 +87,19 @@ async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const uiMessages = convertToUIMessages(messagesFromDb);
 
   const cookieStore = await cookies();
-  const chatModelFromCookie = cookieStore.get("chat-model");
+  const chatModelFromCookie = cookieStore.get('chat-model');
 
   if (!chatModelFromCookie) {
     return (
       <>
         <Chat
-          autoResume={true}
           id={chat.id}
-          initialChatModel={DEFAULT_CHAT_MODEL}
           initialMessages={uiMessages}
+          initialChatModel={DEFAULT_CHAT_MODEL}
           initialVisibilityType={chat.visibility}
           isReadonly={session?.user?.id !== chat.userId}
+          session={session}
+          autoResume={true}
         />
         <DataStreamHandler />
       </>
@@ -69,12 +109,13 @@ async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   return (
     <>
       <Chat
-        autoResume={true}
         id={chat.id}
-        initialChatModel={chatModelFromCookie.value}
         initialMessages={uiMessages}
+        initialChatModel={chatModelFromCookie.value}
         initialVisibilityType={chat.visibility}
         isReadonly={session?.user?.id !== chat.userId}
+        session={session}
+        autoResume={true}
       />
       <DataStreamHandler />
     </>

@@ -1,15 +1,15 @@
 import type {
-  AssistantModelMessage,
-  ToolModelMessage,
+  CoreAssistantMessage,
+  CoreToolMessage,
   UIMessage,
   UIMessagePart,
 } from 'ai';
 import { type ClassValue, clsx } from 'clsx';
-import { formatISO } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 import type { DBMessage, Document } from '@/lib/db/schema';
-import { ChatbotError, type ErrorCode } from './errors';
+import { TTTChatError, type ErrorCode } from './errors';
 import type { ChatMessage, ChatTools, CustomUIDataTypes } from './types';
+import { formatISO } from 'date-fns';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -20,7 +20,7 @@ export const fetcher = async (url: string) => {
 
   if (!response.ok) {
     const { code, cause } = await response.json();
-    throw new ChatbotError(code as ErrorCode, cause);
+    throw new TTTChatError(code as ErrorCode, cause);
   }
 
   return response.json();
@@ -35,13 +35,13 @@ export async function fetchWithErrorHandlers(
 
     if (!response.ok) {
       const { code, cause } = await response.json();
-      throw new ChatbotError(code as ErrorCode, cause);
+      throw new TTTChatError(code as ErrorCode, cause);
     }
 
     return response;
   } catch (error: unknown) {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      throw new ChatbotError('offline:chat');
+      throw new TTTChatError('offline:chat');
     }
 
     throw error;
@@ -63,20 +63,20 @@ export function generateUUID(): string {
   });
 }
 
-type ResponseMessageWithoutId = ToolModelMessage | AssistantModelMessage;
+type ResponseMessageWithoutId = CoreToolMessage | CoreAssistantMessage;
 type ResponseMessage = ResponseMessageWithoutId & { id: string };
 
-export function getMostRecentUserMessage(messages: UIMessage[]) {
+export function getMostRecentUserMessage(messages: Array<UIMessage>) {
   const userMessages = messages.filter((message) => message.role === 'user');
   return userMessages.at(-1);
 }
 
 export function getDocumentTimestampByIndex(
-  documents: Document[],
+  documents: Array<Document>,
   index: number,
 ) {
-  if (!documents) { return new Date(); }
-  if (index > documents.length) { return new Date(); }
+  if (!documents) return new Date();
+  if (index > documents.length) return new Date();
 
   return documents[index].createdAt;
 }
@@ -84,11 +84,11 @@ export function getDocumentTimestampByIndex(
 export function getTrailingMessageId({
   messages,
 }: {
-  messages: ResponseMessage[];
+  messages: Array<ResponseMessage>;
 }): string | null {
   const trailingMessage = messages.at(-1);
 
-  if (!trailingMessage) { return null; }
+  if (!trailingMessage) return null;
 
   return trailingMessage.id;
 }
@@ -108,9 +108,9 @@ export function convertToUIMessages(messages: DBMessage[]): ChatMessage[] {
   }));
 }
 
-export function getTextFromMessage(message: ChatMessage | UIMessage): string {
+export function getTextFromMessage(message: ChatMessage): string {
   return message.parts
     .filter((part) => part.type === 'text')
-    .map((part) => (part as { type: 'text'; text: string}).text)
+    .map((part) => part.text)
     .join('');
 }

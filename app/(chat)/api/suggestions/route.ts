@@ -1,22 +1,22 @@
-import { auth } from "@/app/(auth)/auth";
-import { getSuggestionsByDocumentId } from "@/lib/db/queries";
-import { ChatbotError } from "@/lib/errors";
+import { auth } from '@/app/(auth)/auth';
+import { getSuggestionsByDocumentId } from '@/lib/db/queries';
+import { TTTChatError } from '@/lib/errors';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const documentId = searchParams.get("documentId");
+  const documentId = searchParams.get('documentId');
 
   if (!documentId) {
-    return new ChatbotError(
-      "bad_request:api",
-      "Parameter documentId is required."
+    return new TTTChatError(
+      'bad_request:api',
+      'Parameter documentId is required.',
     ).toResponse();
   }
 
   const session = await auth();
 
   if (!session?.user) {
-    return new ChatbotError("unauthorized:suggestions").toResponse();
+    return new TTTChatError('unauthorized:suggestions').toResponse();
   }
 
   const suggestions = await getSuggestionsByDocumentId({
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   }
 
   if (suggestion.userId !== session.user.id) {
-    return new ChatbotError("forbidden:api").toResponse();
+    return new TTTChatError('forbidden:api').toResponse();
   }
 
   return Response.json(suggestions, { status: 200 });

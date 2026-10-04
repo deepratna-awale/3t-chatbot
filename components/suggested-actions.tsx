@@ -58,7 +58,10 @@ function PureSuggestedActions({
           <Button
             variant="ghost"
             onClick={async () => {
-              window.history.replaceState({}, '', `/chat/${chatId}`);
+              // The About page has its own endpoint and persona, so keep it on /about
+              if (!window.location.pathname.startsWith('/about')) {
+                window.history.replaceState({}, '', `/chat/${chatId}`);
+              }
 
               sendMessage({
                 role: 'user',

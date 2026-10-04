@@ -34,7 +34,9 @@ export async function fetchWithErrorHandlers(
     const response = await fetch(input, init);
 
     if (!response.ok) {
-      const { code, cause } = await response.json();
+      const { code, cause } = await response
+        .json()
+        .catch(() => ({ code: 'offline:chat', cause: response.statusText }));
       throw new TTTChatError(code as ErrorCode, cause);
     }
 
@@ -113,4 +115,12 @@ export function getTextFromMessage(message: ChatMessage): string {
     .filter((part) => part.type === 'text')
     .map((part) => part.text)
     .join('');
+}
+
+// The model picker stores the choice in the `chat-model` cookie without reloading
+export function getSelectedChatModel(fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+
+  const match = document.cookie.match(/(?:^|;\s*)chat-model=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : fallback;
 }

@@ -103,7 +103,7 @@ export function PortfolioHeader({
         transition={{ duration: 0.6, delay: 0.4 }}
       >
         <p className="text-xl md:text-2xl text-muted-foreground font-medium">
-          Generative AI & Machine Learning Engineer
+          Senior Software Engineer, Agentic AI @ Nasdaq (Verafin)
         </p>
         <p className="text-lg md:text-xl text-muted-foreground flex items-center justify-center gap-2">
           <span className="inline-block size-2 bg-green-500 rounded-full animate-pulse" />

@@ -66,11 +66,18 @@ export async function PATCH(request: Request) {
     return new TTTChatError('forbidden:vote').toResponse();
   }
 
-  await voteMessage({
-    chatId,
-    messageId,
-    type: type,
-  });
+  try {
+    await voteMessage({
+      chatId,
+      messageId,
+      type: type,
+    });
+  } catch (error) {
+    if (error instanceof TTTChatError) {
+      return error.toResponse();
+    }
+    throw error;
+  }
 
   return new Response('Message voted', { status: 200 });
 }

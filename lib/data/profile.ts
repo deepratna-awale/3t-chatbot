@@ -12,6 +12,8 @@ export interface GitHubRepo {
   url: string;
   updatedAt: string;
   topics: string[];
+  isFork: boolean;
+  isArchived: boolean;
 }
 
 export interface ProfileData {
@@ -28,6 +30,17 @@ export interface ProfileData {
     content: string;
     lastUpdated: string;
   };
+}
+
+// Forks that are actively maintained and worth showing as projects
+const FEATURED_FORKS = new Set(['open-wallpaper-engine-mac']);
+
+export function isShowcaseRepo(repo: GitHubRepo) {
+  return (
+    (!repo.isFork || FEATURED_FORKS.has(repo.name)) &&
+    !repo.isArchived &&
+    repo.description.trim() !== ''
+  );
 }
 
 // In-memory cache (in production, you'd want to use Redis or similar)
@@ -84,6 +97,8 @@ export async function fetchGitHubData(): Promise<ProfileData['github']> {
       url: repo.html_url,
       updatedAt: repo.updated_at,
       topics: repo.topics || [],
+      isFork: Boolean(repo.fork),
+      isArchived: Boolean(repo.archived),
     }));
 
     return {
@@ -120,22 +135,27 @@ export async function fetchResumeData(): Promise<ProfileData['resume']> {
 
   return {
     content: `
+      Current role: Senior Software Engineer, Agentic AI at Nasdaq (Verafin), May 2026 to present
+      Previous role: Generative AI Associate at Innodata Inc., Aug 2025 to May 2026
+
       Education:
-      - Master of Computer Science, Memorial University of Newfoundland
-      - Strong background in Machine Learning, Computer Vision, and AI
-      
+      - MASc Computer Engineering, Memorial University of Newfoundland (2024)
+      - BEng Information Technology, RGCER Nagpur (2021)
+      - AWS Certified Machine Learning Engineer, Associate (2025)
+
       Skills:
-      - Programming: Python, JavaScript, TypeScript, C++, Java
-      - AI/ML: Stable Diffusion, TensorFlow, PyTorch, Computer Vision
-      - Web Development: Next.js, React, Node.js
-      - Tools: Docker, Git, Linux, Cloud Platforms
-      
+      - Agentic AI: AWS Bedrock AgentCore, LangChain, prompt engineering, evals, RAG
+      - ML/DL: PyTorch, TensorFlow, scikit-learn, OpenCV, diffusion models
+      - Cloud/Infra: AWS, Terraform, Docker, CI/CD
+      - Data: PySpark, pandas, Neo4j, SQL
+      - Languages: Python, TypeScript, Java, C++, SQL
+
       Notable Projects:
-      - AutoExpress: Character expression generation using Stable Diffusion
-      - CivitAI tools: Model management and batch downloading
-      - Smart Character Prompter: Chat history-based character prompts
-      - Computer Vision: 3D reconstruction, panorama creation
-      - Data Science: Fraud detection, college clustering analysis
+      - AutoExpress: character expression generation using Stable Diffusion
+      - sd-parsers: TypeScript package for AI image generation metadata
+      - Open Wallpaper Engine for macOS
+      - AgentCore-TF: Terraform module for multi-agent A2A on Bedrock AgentCore
+      - Fraud detection pipeline with PySpark and Neo4j
     `,
     lastUpdated: new Date().toISOString(),
   };
@@ -196,9 +216,7 @@ export async function getProfileData(
 export async function getFormattedProfileForPrompt(): Promise<string> {
   const data = await getProfileData();
 
-  const topRepos = data.github.repos
-    .filter((repo) => !repo.name.includes('fork') && repo.description)
-    .slice(0, 15);
+  const topRepos = data.github.repos.filter(isShowcaseRepo).slice(0, 15);
 
   return `
 Recent GitHub Activity (as of ${data.github.lastUpdated}):

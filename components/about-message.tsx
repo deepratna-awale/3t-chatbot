@@ -189,13 +189,15 @@ const PureAboutMessage = ({
               return null;
             })}
 
-            <MessageActions
-              key={`action-${message.id}`}
-              chatId={chatId}
-              message={message}
-              vote={vote}
-              isLoading={isLoading}
-            />
+            {message.id !== 'welcome' && (
+              <MessageActions
+                key={`action-${message.id}`}
+                chatId={chatId}
+                message={message}
+                vote={vote}
+                isLoading={isLoading}
+              />
+            )}
           </div>
         </div>
       </motion.div>
@@ -207,6 +209,9 @@ export const AboutMessage = memo(PureAboutMessage, (prevProps, nextProps) => {
   if (prevProps.isLoading !== nextProps.isLoading) return false;
   if (prevProps.isLoading && nextProps.isLoading) return false;
   if (prevProps.message.id !== nextProps.message.id) return false;
+  if (prevProps.requiresScrollPadding !== nextProps.requiresScrollPadding)
+    return false;
+  if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
   if (!equal(prevProps.vote, nextProps.vote)) return false;
 
   return true;

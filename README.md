@@ -41,7 +41,7 @@
 
 ## Model Providers
 
-This application ships with [xAI](https://x.ai) `grok-2-1212` as the default chat model. However, with the [AI SDK](https://sdk.vercel.ai/docs), you can switch LLM providers to [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), and [many more](https://sdk.vercel.ai/providers/ai-sdk-providers) with just a few lines of code.
+This application ships with [xAI](https://x.ai) Grok 4.1 Fast as the default chat model, served through the [Vercel AI Gateway](https://vercel.com/ai-gateway) (authenticated automatically with OIDC on Vercel, or with `AI_GATEWAY_API_KEY` elsewhere). Set `XAI_API_KEY` to call xAI directly instead. However, with the [AI SDK](https://sdk.vercel.ai/docs), you can switch LLM providers to [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), and [many more](https://sdk.vercel.ai/providers/ai-sdk-providers) with just a few lines of code.
 
 ## Deploy Your Own
 

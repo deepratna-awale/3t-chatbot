@@ -2,8 +2,10 @@
 
 import { generateText, type UIMessage } from 'ai';
 import { cookies } from 'next/headers';
+import { auth } from '@/app/(auth)/auth';
 import {
   deleteMessagesByChatIdAfterTimestamp,
+  getChatById,
   getMessageById,
   updateChatVisiblityById,
 } from '@/lib/db/queries';
@@ -33,8 +35,18 @@ export async function generateTitleFromUserMessage({
   return title;
 }
 
+async function isChatOwner(chatId: string) {
+  const session = await auth();
+  if (!session?.user) return false;
+
+  const chat = await getChatById({ id: chatId });
+  return chat?.userId === session.user.id;
+}
+
 export async function deleteTrailingMessages({ id }: { id: string }) {
   const [message] = await getMessageById({ id });
+
+  if (!message || !(await isChatOwner(message.chatId))) return;
 
   await deleteMessagesByChatIdAfterTimestamp({
     chatId: message.chatId,
@@ -49,5 +61,7 @@ export async function updateChatVisibility({
   chatId: string;
   visibility: VisibilityType;
 }) {
+  if (!(await isChatOwner(chatId))) return;
+
   await updateChatVisiblityById({ chatId, visibility });
 }

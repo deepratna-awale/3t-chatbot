@@ -199,7 +199,9 @@ export async function POST(request: Request) {
           const result = streamText({
             model: languageModel,
             system: systemPrompt({ selectedChatModel, requestHints }),
-            messages: convertToModelMessages(uiMessages),
+            messages: convertToModelMessages(uiMessages, {
+              ignoreIncompleteToolCalls: true,
+            }),
             stopWhen: stepCountIs(5),
             experimental_activeTools:
               selectedChatModel === 'chat-model-reasoning'
@@ -313,6 +315,10 @@ export async function DELETE(request: Request) {
   }
 
   const chat = await getChatById({ id });
+
+  if (!chat) {
+    return new TTTChatError('not_found:chat').toResponse();
+  }
 
   if (chat.userId !== session.user.id) {
     return new TTTChatError('forbidden:chat').toResponse();

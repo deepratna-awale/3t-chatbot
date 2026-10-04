@@ -1,10 +1,13 @@
-import { getProfileData } from '@/lib/data/profile';
+import { getProfileData, isShowcaseRepo } from '@/lib/data/profile';
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/(auth)/auth';
 import { myProvider } from '@/lib/ai/providers';
 import { generateText } from 'ai';
 
 export const dynamic = 'force-dynamic';
+
+// Explanations are cached per repo description so page loads don't re-run the model
+const explanationCache = new Map<string, string>();
 
 // Function to generate AI explanation for a project
 async function generateProjectExplanation(
@@ -13,6 +16,10 @@ async function generateProjectExplanation(
   topics: string[],
   language: string,
 ) {
+  const cacheKey = `${projectName}:${originalDescription}`;
+  const cached = explanationCache.get(cacheKey);
+  if (cached) return cached;
+
   try {
     const { text } = await generateText({
       model: myProvider.languageModel('chat-model'),
@@ -26,7 +33,9 @@ async function generateProjectExplanation(
       maxRetries: 1,
     });
 
-    return text.trim();
+    const explanation = text.trim();
+    explanationCache.set(cacheKey, explanation);
+    return explanation;
   } catch (error) {
     console.error(`Error generating explanation for ${projectName}:`, error);
     return originalDescription; // Fallback to original description
@@ -45,12 +54,7 @@ export async function GET() {
 
     // Filter repos for project cards
     const filteredRepos = profileData.github.repos
-      .filter(
-        (repo) =>
-          !repo.name.includes('fork') &&
-          repo.description &&
-          repo.description.trim() !== '',
-      )
+      .filter(isShowcaseRepo)
       .slice(0, 12); // Limit to top 12 projects
 
     // Generate AI explanations for each project

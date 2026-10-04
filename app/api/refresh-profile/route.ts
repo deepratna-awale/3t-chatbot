@@ -3,6 +3,13 @@ import { NextResponse } from 'next/server';
 import { getProfileData } from '@/lib/data/profile';
 
 export async function POST(request: NextRequest) {
+  if (!isCronRequest(request)) {
+    return NextResponse.json(
+      { success: false, message: 'Unauthorized' },
+      { status: 401 },
+    );
+  }
+
   try {
     // Force refresh the profile data
     const data = await getProfileData(true);
@@ -22,9 +29,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Vercel Cron sends `Authorization: Bearer $CRON_SECRET` when CRON_SECRET is set
+function isCronRequest(request: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  return (
+    Boolean(secret) &&
+    request.headers.get('authorization') === `Bearer ${secret}`
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const data = await getProfileData();
+    const data = await getProfileData(isCronRequest(request));
 
     return NextResponse.json({
       success: true,

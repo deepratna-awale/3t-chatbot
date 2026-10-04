@@ -109,7 +109,10 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
 
   const submitForm = useCallback(() => {
-    window.history.replaceState({}, '', `/chat/${chatId}`);
+    // The About page has its own endpoint and persona, so keep it on /about
+    if (!window.location.pathname.startsWith('/about')) {
+      window.history.replaceState({}, '', `/chat/${chatId}`);
+    }
 
     sendMessage({
       role: 'user',
@@ -117,7 +120,7 @@ function PureMultimodalInput({
         ...attachments.map((attachment) => ({
           type: 'file' as const,
           url: attachment.url,
-          name: attachment.name,
+          filename: attachment.name,
           mediaType: attachment.contentType,
         })),
         {

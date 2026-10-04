@@ -2,11 +2,16 @@
 
 import { DefaultChatTransport } from 'ai';
 import { useChat } from '@ai-sdk/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
-import { fetcher, fetchWithErrorHandlers, generateUUID } from '@/lib/utils';
+import {
+  fetcher,
+  fetchWithErrorHandlers,
+  generateUUID,
+  getSelectedChatModel,
+} from '@/lib/utils';
 import { Artifact } from './artifact';
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
@@ -45,6 +50,12 @@ export function Chat({
     initialVisibilityType,
   });
 
+  // useChat keeps the transport from the first render, so read the latest value through a ref
+  const visibilityTypeRef = useRef(visibilityType);
+  useEffect(() => {
+    visibilityTypeRef.current = visibilityType;
+  }, [visibilityType]);
+
   const { mutate } = useSWRConfig();
   const { setDataStream } = useDataStream();
 
@@ -71,8 +82,8 @@ export function Chat({
           body: {
             id,
             message: messages.at(-1),
-            selectedChatModel: initialChatModel,
-            selectedVisibilityType: visibilityType,
+            selectedChatModel: getSelectedChatModel(initialChatModel),
+            selectedVisibilityType: visibilityTypeRef.current,
             ...body,
           },
         };

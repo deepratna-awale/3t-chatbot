@@ -192,6 +192,8 @@ export async function getChatsByUserId({
       hasMore,
     };
   } catch (error) {
+    if (error instanceof TTTChatError) throw error;
+
     throw new TTTChatError(
       'bad_request:database',
       'Failed to get chats by user id',
@@ -248,7 +250,7 @@ export async function voteMessage({
     const [existingVote] = await db
       .select()
       .from(vote)
-      .where(and(eq(vote.messageId, messageId)));
+      .where(and(eq(vote.messageId, messageId), eq(vote.chatId, chatId)));
 
     if (existingVote) {
       return await db

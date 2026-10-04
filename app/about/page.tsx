@@ -80,7 +80,7 @@ export default async function AboutPage() {
   const session = await auth();
 
   if (!session) {
-    redirect('/api/auth/guest');
+    redirect('/api/auth/guest?redirectUrl=%2Fabout');
   }
 
   const id = generateUUID();

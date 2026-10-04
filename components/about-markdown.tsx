@@ -1,3 +1,4 @@
+import { ExperienceMessage } from './experience-message';
 import Link from 'next/link';
 import React, { memo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
@@ -109,12 +110,18 @@ const NonMemoizedAboutMarkdown = ({
   // Check if the content contains the projects marker (exact match only)
   const hasProjectsMarker = children.trim() === '[SHOW_PROJECTS]';
 
+  const hasExperienceMarker = children.trim() === '[SHOW_EXPERIENCE]';
+
   // Check if the content contains the portfolio header marker (exact match only)
   const hasPortfolioHeader = children.trim() === '[PORTFOLIO_HEADER]';
 
   // If portfolio header marker is present, show only the portfolio header
   if (hasPortfolioHeader) {
     return <PortfolioHeader sendMessage={sendMessage} />;
+  }
+
+  if (hasExperienceMarker) {
+    return <ExperienceMessage />;
   }
 
   // If projects marker is present, show only the project cards

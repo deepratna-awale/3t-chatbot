@@ -30,19 +30,19 @@ export function ProjectCard({ project }: ProjectCardProps) {
     .filter(Boolean);
 
   return (
-    <Card className="relative flex w-full flex-col overflow-hidden md:flex-row md:items-center border border-border/40 bg-card/50 backdrop-blur-sm hover:bg-card/70 transition-all duration-200 hover:shadow-lg">
+    <Card className="relative flex w-full flex-col overflow-hidden md:flex-row border border-border/40 bg-card/50 backdrop-blur-sm hover:bg-card/70 transition-all duration-200 hover:shadow-lg">
       {project.imageUrl && (
         <a
           href={project.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full shrink-0 bg-muted md:w-[45%]"
+          className="w-full shrink-0 md:w-1/4 md:self-stretch"
         >
           <img
             src={project.imageUrl}
             alt={`${project.name} social preview`}
             loading="lazy"
-            className="aspect-[2/1] w-full object-cover"
+            className="aspect-[2/1] w-full object-cover md:aspect-auto md:h-full [-webkit-mask-image:linear-gradient(to_bottom,black_60%,transparent)] [mask-image:linear-gradient(to_bottom,black_60%,transparent)] md:[-webkit-mask-image:linear-gradient(to_right,black_40%,transparent)] md:[mask-image:linear-gradient(to_right,black_40%,transparent)]"
           />
         </a>
       )}

@@ -1,3 +1,4 @@
+import { EducationMessage } from './education-message';
 import { ExperienceMessage } from './experience-message';
 import Link from 'next/link';
 import React, { memo } from 'react';
@@ -112,6 +113,8 @@ const NonMemoizedAboutMarkdown = ({
 
   const hasExperienceMarker = children.trim() === '[SHOW_EXPERIENCE]';
 
+  const hasEducationMarker = children.trim() === '[SHOW_EDUCATION]';
+
   // Check if the content contains the portfolio header marker (exact match only)
   const hasPortfolioHeader = children.trim() === '[PORTFOLIO_HEADER]';
 
@@ -122,6 +125,10 @@ const NonMemoizedAboutMarkdown = ({
 
   if (hasExperienceMarker) {
     return <ExperienceMessage />;
+  }
+
+  if (hasEducationMarker) {
+    return <EducationMessage />;
   }
 
   // If projects marker is present, show only the project cards
